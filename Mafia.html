@@ -52,7 +52,7 @@
         /* ПК ОПТИМИЗАЦИЯ */
         @media (min-width: 768px) {
             body {
-                background-color: #1a1a1a; /* Фон вокруг телефона на ПК */
+                background-color: #1a1a1a;
                 display: flex; justify-content: center;
             }
             .app-wrapper {
@@ -62,7 +62,6 @@
                 box-shadow: 0 0 40px rgba(0,0,0,0.5);
                 position: relative;
             }
-            /* Скроллбар */
             ::-webkit-scrollbar { width: 6px; }
             ::-webkit-scrollbar-track { background: transparent; }
             ::-webkit-scrollbar-thumb { background: var(--hint-color); border-radius: 3px; }
@@ -72,7 +71,8 @@
         .container {
             padding: 16px;
             padding-top: calc(16px + var(--safe-top));
-            padding-bottom: calc(90px + var(--safe-bottom));
+            /* Увеличили отступ снизу, чтобы кнопка Telegram не перекрывала контент */
+            padding-bottom: calc(100px + var(--safe-bottom));
         }
 
         /* --- ХЕДЕР И ПОИСК --- */
@@ -185,16 +185,6 @@
         input:checked + .slider { background-color: var(--button-color); }
         input:checked + .slider:before { transform: translateX(20px); }
         .dark-theme .slider { background-color: #363636; }
-
-        /* ПЛАВАЮЩАЯ КНОПКА (Desktop/Fallback) */
-        .fab {
-            position: fixed; bottom: calc(20px + var(--safe-bottom)); right: 20px;
-            background: var(--button-color); color: #fff; padding: 14px 24px;
-            border-radius: 30px; font-weight: 600; box-shadow: 0 4px 15px rgba(36,129,204,0.4);
-            cursor: pointer; display: none; border: none; font-size: 16px; z-index: 100;
-            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
 
     </style>
 </head>
@@ -310,8 +300,6 @@
             </div>
 
         </div>
-
-        <button class="fab" id="fab" onclick="saveData()">💾 Сохранить</button>
     </div>
 </div>
 
@@ -319,10 +307,9 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // --- ОБНОВЛЕННЫЕ ДЕФОЛТНЫЕ НАСТРОЙКИ ---
     const DEFAULTS = {
         max_players: 12, registration_time: 300, night_time: 60, day_time: 60, vote_time: 60,
-        last_word_time: 30, hunter_time: 30, // <--- НОВЫЕ ПАРАМЕТРЫ
+        last_word_time: 30, hunter_time: 30,
         strict_chat_mode: false, split_duties: false,
         active_roles: {
             'doc': true, 'kom': true, 'sergeant': true, 'bodyguard': true, 
@@ -350,7 +337,7 @@
         {id: 'clown', icon: '🤡', name: 'Шутник'},
     ];
 
-    // MOCK DATA для теста (будет перезаписано данными из URL)
+    // Демо-данные для тестирования в браузере. В Telegram они не используются, так как бот передает реальные данные.
     const DEMO_CHATS = [
         { id: 123, title: 'KotoMafia Settings', count: 5, settings: null },
     ];
@@ -360,7 +347,6 @@
     let settings = null;
 
     function init() {
-        // Попытка получить данные из URL
         const params = new URLSearchParams(window.location.search);
         const dataStr = params.get('data');
         
@@ -371,6 +357,7 @@
         }
         
         if (availableChats.length === 0) {
+            // Если мы открыли сайт НЕ через бота, показываем Демо
             availableChats = DEMO_CHATS;
         }
 
@@ -418,10 +405,8 @@
 
     function openSettings(chat) {
         currentChatId = chat.id;
-        // Клонируем настройки чата или берем дефолт
         settings = JSON.parse(JSON.stringify(chat.settings || DEFAULTS));
         
-        // Гарантируем, что новые поля существуют (если в базе старые настройки)
         if(settings.last_word_time === undefined) settings.last_word_time = 30;
         if(settings.hunter_time === undefined) settings.hunter_time = 30;
 
@@ -437,7 +422,7 @@
     function goBack() {
         currentChatId = null;
         tg.MainButton.hide();
-        document.getElementById('fab').style.display = 'none';
+        // Скрываем нижнюю кнопку, если она была
         
         document.getElementById('screen-settings').classList.remove('active');
         document.getElementById('screen-chats').classList.add('active');
@@ -447,7 +432,6 @@
     function fillUI() {
         const s = settings;
         
-        // Роли
         const grid = document.getElementById('rolesGrid');
         grid.innerHTML = '';
         let activeC = 0;
@@ -462,18 +446,14 @@
         });
         document.getElementById('rolesCount').innerText = activeC;
 
-        // Слайдеры
         setVal('max_players', s.max_players);
         setVal('reg_time', s.registration_time);
         setVal('night_time', s.night_time);
         setVal('day_time', s.day_time);
         setVal('vote_time', s.vote_time);
-        
-        // НОВЫЕ ПОЛЯ
         setVal('last_word_time', s.last_word_time);
         setVal('hunter_time', s.hunter_time);
 
-        // Чекбоксы
         document.getElementById('c_strict').checked = s.strict_chat_mode;
         document.getElementById('c_split').checked = s.split_duties;
     }
@@ -508,10 +488,7 @@
     function upd(k) {
         const v = parseInt(document.getElementById(`i_${k}`).value);
         document.getElementById(`d_${k}`).innerText = v;
-        
-        // Обновляем settings
         settings[k] = v;
-        
         markDirty();
     }
 
@@ -520,11 +497,15 @@
         settings.split_duties = document.getElementById('c_split').checked;
         
         tg.MainButton.show();
-        document.getElementById('fab').style.display = 'block';
     }
 
     function saveData() {
-        if(!currentChatId) return;
+        // Если ID чата нет, значит сайт открыт не через бота
+        if(!currentChatId) {
+            tg.showAlert("Ошибка: ID чата не найден. Откройте настройки через бота /settings.");
+            return;
+        }
+        
         tg.MainButton.showProgress();
         
         const payload = { chat_id: currentChatId, settings: settings };
