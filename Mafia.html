@@ -253,7 +253,7 @@
                     </div>
                 </div>
                 <div class="card">
-                    <div class="card-header">Длительность (сек)</div>
+                    <div class="card-header">Длительность фаз (сек)</div>
                     <div class="control-row">
                         <div class="row-label"><span>Регистрация</span> <span class="row-val" id="d_reg_time">300</span></div>
                         <input type="range" min="60" max="600" step="30" id="i_reg_time" oninput="upd('reg_time')">
@@ -270,6 +270,16 @@
                         <div class="row-label"><span>Голосование</span> <span class="row-val" id="d_vote_time">60</span></div>
                         <input type="range" min="30" max="300" step="15" id="i_vote_time" oninput="upd('vote_time')">
                     </div>
+                    
+                    <div class="control-row">
+                        <div class="row-label"><span>Предсмертное слово</span> <span class="row-val" id="d_last_word_time">30</span></div>
+                        <input type="range" min="15" max="120" step="15" id="i_last_word_time" oninput="upd('last_word_time')">
+                    </div>
+                    <div class="control-row">
+                        <div class="row-label"><span>Выстрел Хантера</span> <span class="row-val" id="d_hunter_time">30</span></div>
+                        <input type="range" min="15" max="120" step="15" id="i_hunter_time" oninput="upd('hunter_time')">
+                    </div>
+                    
                 </div>
             </div>
 
@@ -309,9 +319,10 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // --- ДЕФОЛТНЫЕ НАСТРОЙКИ (ЕСЛИ ПУСТО) ---
+    // --- ОБНОВЛЕННЫЕ ДЕФОЛТНЫЕ НАСТРОЙКИ ---
     const DEFAULTS = {
         max_players: 12, registration_time: 300, night_time: 60, day_time: 60, vote_time: 60,
+        last_word_time: 30, hunter_time: 30, // <--- НОВЫЕ ПАРАМЕТРЫ
         strict_chat_mode: false, split_duties: false,
         active_roles: {
             'doc': true, 'kom': true, 'sergeant': true, 'bodyguard': true, 
@@ -321,7 +332,6 @@
         }
     };
 
-    // --- МЕТАДАННЫЕ РОЛЕЙ (СОВПАДАЮТ С MODELS.PY) ---
     const ROLES = [
         {id: 'doc', icon: '🚑', name: 'Ветеринар'},
         {id: 'kom', icon: '🕵️‍♂️', name: 'Кот-Нюхач'},
@@ -340,23 +350,17 @@
         {id: 'clown', icon: '🤡', name: 'Шутник'},
     ];
 
-    // --- ДАННЫЕ ОТ БОТА ---
-    // В продакшене бот будет передавать это в URL или initData
-    // Пока оставим пустым, чтобы работала загрузка "извне"
-    let availableChats = []; 
-    
-    // ДЕМО ДАННЫЕ (Если бот ничего не передал, для теста)
+    // MOCK DATA для теста (будет перезаписано данными из URL)
     const DEMO_CHATS = [
-        { id: 123, title: 'KotoMafia Dev', count: 5, settings: null },
-        { id: 456, title: 'Тестовый Чат', count: 12, settings: null },
-        { id: 789, title: 'Флудилка Котиков', count: 154, settings: null }
+        { id: 123, title: 'KotoMafia Settings', count: 5, settings: null },
     ];
 
+    let availableChats = []; 
     let currentChatId = null;
     let settings = null;
 
     function init() {
-        // 1. Попытка получить данные из URL (если бот передает JSON)
+        // Попытка получить данные из URL
         const params = new URLSearchParams(window.location.search);
         const dataStr = params.get('data');
         
@@ -366,23 +370,19 @@
             } catch(e) { console.error('Error parsing data'); }
         }
         
-        // Если данных нет, грузим демо (для отладки в браузере)
         if (availableChats.length === 0) {
             availableChats = DEMO_CHATS;
         }
 
         renderChats(availableChats);
 
-        // Настройка кнопки
         tg.MainButton.setText("Сохранить настройки");
         tg.MainButton.onClick(saveData);
 
-        // Тема
         if(tg.colorScheme === 'dark') document.body.classList.add('dark-theme');
         else document.body.classList.add('light-theme');
     }
 
-    // --- СПИСОК ЧАТОВ ---
     function renderChats(list) {
         const ul = document.getElementById('chatList');
         const empty = document.getElementById('emptyState');
@@ -416,15 +416,16 @@
         renderChats(filtered);
     }
 
-    // --- ОТКРЫТИЕ НАСТРОЕК ---
     function openSettings(chat) {
         currentChatId = chat.id;
         // Клонируем настройки чата или берем дефолт
         settings = JSON.parse(JSON.stringify(chat.settings || DEFAULTS));
         
+        // Гарантируем, что новые поля существуют (если в базе старые настройки)
+        if(settings.last_word_time === undefined) settings.last_word_time = 30;
+        if(settings.hunter_time === undefined) settings.hunter_time = 30;
+
         document.getElementById('chatTitle').innerText = chat.title;
-        
-        // Анимация перехода
         document.getElementById('screen-chats').classList.remove('active');
         document.getElementById('screen-settings').classList.add('active');
         window.scrollTo(0,0);
@@ -443,7 +444,6 @@
         tg.HapticFeedback.selectionChanged();
     }
 
-    // --- ЛОГИКА UI ---
     function fillUI() {
         const s = settings;
         
@@ -468,6 +468,10 @@
         setVal('night_time', s.night_time);
         setVal('day_time', s.day_time);
         setVal('vote_time', s.vote_time);
+        
+        // НОВЫЕ ПОЛЯ
+        setVal('last_word_time', s.last_word_time);
+        setVal('hunter_time', s.hunter_time);
 
         // Чекбоксы
         document.getElementById('c_strict').checked = s.strict_chat_mode;
@@ -491,7 +495,6 @@
         
         if(!isActive) tg.HapticFeedback.impactOccurred('light');
         
-        // Обновить счетчик
         const count = Object.values(settings.active_roles).filter(Boolean).length;
         document.getElementById('rolesCount').innerText = count;
         markDirty();
@@ -505,7 +508,10 @@
     function upd(k) {
         const v = parseInt(document.getElementById(`i_${k}`).value);
         document.getElementById(`d_${k}`).innerText = v;
+        
+        // Обновляем settings
         settings[k] = v;
+        
         markDirty();
     }
 
@@ -513,9 +519,7 @@
         settings.strict_chat_mode = document.getElementById('c_strict').checked;
         settings.split_duties = document.getElementById('c_split').checked;
         
-        // Показать кнопки сохранения
         tg.MainButton.show();
-        // Показываем FAB только если мы не на десктопе в узком окне (хотя стили сами справятся)
         document.getElementById('fab').style.display = 'block';
     }
 
@@ -526,7 +530,6 @@
         const payload = { chat_id: currentChatId, settings: settings };
         tg.sendData(JSON.stringify(payload));
         
-        // Имитация успеха (если открыто в браузере)
         setTimeout(() => { 
             tg.MainButton.hideProgress(); 
             tg.close();
